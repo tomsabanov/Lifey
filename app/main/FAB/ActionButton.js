@@ -1,0 +1,350 @@
+import React, { Component, PropTypes } from 'react';
+import { StyleSheet, Text, View, Animated, TouchableOpacity, Platform } from 'react-native';
+import ActionButtonItem from './ActionButtonItem';
+
+const alignItemsMap = {
+  "center" : "center",
+  "left"  : "flex-start",
+  "right" : "flex-end"
+}
+
+const shadowHeight = 12;
+
+export default class ActionButton extends Component {
+
+  constructor(props) {
+    super(props);
+
+    this.state = {
+      active: props.active,
+    }
+
+    this.anim = new Animated.Value(props.active ? 1 : 0);
+    this.timeout = null;
+  }
+
+  componentWillUnmount() {
+    clearTimeout(this.timeout);
+  }
+
+
+  //////////////////////
+  // STYLESHEET GETTERS
+  //////////////////////
+
+  getContainerStyles() {
+    return [this.getOverlayStyles(), this.getOrientation(), this.getOffsetXY()];
+  }
+
+  getActionButtonStyles() {
+    const actionButtonStyles = [styles.actionBarItem, this.getButtonSize()];
+    return actionButtonStyles;
+  }
+
+  getOrientation() {
+    return { alignItems: alignItemsMap[this.props.position] };
+  }
+
+  getButtonSize() {
+    return {
+      width: this.props.size + 12,
+      height: this.props.size + shadowHeight,
+    }
+  }
+
+  getOffsetXY() {
+    return {
+      paddingHorizontal: this.props.offsetX - 8,
+      paddingBottom: this.props.verticalOrientation === 'up' ? this.props.offsetY : 0,
+      paddingTop: this.props.verticalOrientation === 'down' ? this.props.offsetY : 0
+    };
+  }
+
+  getActionsStyle() {
+    return [
+      styles.actionsVertical,
+      this.getOrientation(),
+      {
+        flexDirection: 'column',
+        justifyContent: this.props.verticalOrientation === 'up' ? 'flex-end' : 'flex-start'
+      },
+    ];
+  }
+
+  getOverlayStyles() {
+    return [
+      styles.overlay,
+      {
+        justifyContent: this.props.verticalOrientation === 'up' ? 'flex-end' : 'flex-start'
+      }
+    ]
+  }
+
+
+  //////////////////////
+  // RENDER METHODS
+  //////////////////////
+
+  render() {
+   /*
+    Here I add TouchableOpacity -> in it, the button renders......
+   */
+    return (
+      <View pointerEvents="box-none" style={this.getOverlayStyles()}>
+        <Animated.View pointerEvents="none" style={[this.getOverlayStyles(), {
+          backgroundColor: this.props.bgColor,
+          opacity: this.anim
+        }]}>
+          {this.props.backdrop}
+        </Animated.View>
+        <View pointerEvents="box-none" style={this.getContainerStyles()}>
+          {(this.state.active && !this.props.backgroundTappable) && this._renderTappableBackground()}
+
+          {this.props.verticalOrientation === 'up' &&
+            this.props.children && this._renderActions()}
+             <TouchableOpacity activeOpacity={0.7} onLongPress={this.props.onLongPress}
+              onPress={() => {
+                this.props.onPress()
+                if (this.props.children) this.animateButton()
+              }}>
+                {this._renderButton()}
+              </TouchableOpacity>
+          {this.props.verticalOrientation === 'down' &&
+            this.props.children && this._renderActions()}
+        </View>
+      </View>
+    );
+  }
+
+  _renderButton() {
+    const buttonColorMax = this.props.btnOutRange ? this.props.btnOutRange : this.props.buttonColor;
+
+    const animatedViewStyle = [
+      styles.btn,
+      {
+        backgroundColor: this.anim.interpolate({
+          inputRange: [0, 1],
+          outputRange: [this.props.buttonColor, buttonColorMax]
+        }),
+        transform: [{
+            scale: this.anim.interpolate({
+              inputRange: [0, 1],
+              outputRange: [1, this.props.outRangeScale]
+            }),
+          }, {
+            rotate: this.anim.interpolate({
+              inputRange: [0, 1],
+              outputRange: ['0deg', this.props.degrees + 'deg']
+            })
+          }],
+      },
+    ];
+
+    const combinedStyle = {
+      width: this.props.size,
+      height: this.props.size,
+      borderRadius: this.props.size / 2,
+      marginBottom: shadowHeight,
+      backgroundColor: this.props.buttonColor
+    }
+
+    const actionButtonStyles = [ this.getActionButtonStyles(), combinedStyle, animatedViewStyle ]
+
+    return (
+      <View style={ !this.props.hideShadow && [ styles.btnShadow, combinedStyle, { marginHorizontal: 8 }]}>
+        <Animated.View style={ actionButtonStyles }>
+
+            {this._renderButtonIcon()}
+
+        </Animated.View>
+      </View>
+    );
+  }
+
+  _renderButtonIcon() {
+    const { icon, btnOutRangeTxt, buttonTextColor } = this.props;
+
+    if (icon) return icon;
+
+    const buttonTextColorMax = btnOutRangeTxt ? btnOutRangeTxt : buttonTextColor;
+
+    return (
+      <Animated.Text style={[styles.btnText, {
+        color: this.anim.interpolate({
+          inputRange: [0, 1],
+          outputRange: [buttonTextColor, buttonTextColorMax]
+        })
+      }]}>
+        +
+      </Animated.Text>
+    )
+  }
+
+  _renderActions() {
+    if (!this.state.active) return null;
+
+    let actionButtons = this.props.children
+
+    if (!Array.isArray(this.props.children)) {
+      actionButtons = [this.props.children]
+    }
+
+    return (
+        <View
+          style={this.getActionsStyle()}
+          pointerEvents={'box-none'}
+        >
+          {actionButtons.map((ActionButton, index) => {
+            return (
+              <ActionButtonItem
+                styles={this.state.ABIStyles}
+                key={index}
+                anim={this.anim}
+                {...this.props}
+                parentSize={this.props.size}
+                btnColor={this.props.btnOutRange}
+                {...ActionButton.props}
+                onPress={() => {
+                  if (this.props.autoInactive){
+                    this.timeout = setTimeout(this.reset.bind(this), 200);
+                  }
+                  ActionButton.props.onPress();
+                }}
+              />
+            )
+          })}
+        </View>
+    );
+  }
+
+  _renderTappableBackground() {
+    return (
+      <TouchableOpacity
+        activeOpacity={1}
+        style={this.getOverlayStyles()}
+        onPress={this.reset.bind(this)}
+      />
+    );
+  }
+
+
+  //////////////////////
+  // Animation Methods
+  //////////////////////
+
+  animateButton(animate=true) {
+    if (this.state.active) return this.reset();
+
+    if (animate) {
+      Animated.spring(this.anim, { toValue: 1 }).start();
+    } else {
+      this.anim.setValue(1);
+    }
+
+    this.setState({ active: true });
+  }
+
+/*
+In line 255, I must make it so the view only dissapears, no animation needed.......
+http://stackoverflow.com/questions/30266831/hide-show-components-in-react-native
+With this implementation we could just change the _renderActions method, where all the other buttons render...
+*/
+
+  reset(animate=true) {
+    if (this.props.onReset) this.props.onReset();
+
+    if (animate) {
+      Animated.spring(this.anim, { toValue: 0, tension:100 }).start();
+    } else {
+      this.anim.setValue(0);
+    }
+
+    setTimeout(() => this.setState({ active: false }), 500);
+  }
+}
+
+ActionButton.Item = ActionButtonItem;
+
+ActionButton.propTypes = {
+  active: PropTypes.bool,
+
+  position: PropTypes.string,
+
+  hideShadow: PropTypes.bool,
+
+  bgColor: PropTypes.string,
+  buttonColor: PropTypes.string,
+  buttonTextColor: PropTypes.string,
+
+  offsetX: PropTypes.number,
+  offsetY: PropTypes.number,
+  spacing: PropTypes.number,
+  size: PropTypes.number,
+  autoInactive: PropTypes.bool,
+  onPress: PropTypes.func,
+  backdrop: PropTypes.oneOfType([
+    PropTypes.bool,
+    PropTypes.object
+  ]),
+  degrees: PropTypes.number,
+  verticalOrientation: PropTypes.oneOf(['up', 'down']),
+  backgroundTappable: PropTypes.bool,
+};
+
+ActionButton.defaultProps = {
+  active: false,
+  bgColor: 'transparent',
+  buttonColor: 'rgba(0,0,0,1)',
+  buttonTextColor: 'rgba(255,255,255,1)',
+  spacing: 15,
+  outRangeScale: 1,
+  autoInactive: true,
+  onPress: () => {},
+  backdrop: false,
+  degrees: 135,
+  position: 'right',
+  offsetX: 0,
+  offsetY: 30,
+  size: 56,
+  verticalOrientation: 'up',
+  backgroundTappable: false,
+};
+
+const styles = StyleSheet.create({
+  overlay: {
+    position: 'absolute',
+    bottom: 0,
+    left: 0,
+    right: 0,
+    top: 0,
+    backgroundColor: 'transparent',
+  },
+  actionBarItem: {
+    alignItems: 'center',
+    justifyContent: 'center',
+    backgroundColor: 'transparent',
+    marginBottom: 12,
+  },
+  btn: {
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  btnText: {
+    marginTop: -4,
+    fontSize: 24,
+    backgroundColor: 'transparent',
+    position: 'relative',
+  },
+  btnShadow: {
+    shadowOpacity: 0.3,
+    shadowOffset: {
+      width: 0, height: 8,
+    },
+    shadowColor: '#000',
+    shadowRadius: 4,
+    elevation: 8,
+  },
+  actionsVertical: {
+    flex: 1,
+  }
+});
